@@ -2,7 +2,7 @@ import { normalize, Platform, Post, assertNextCursor } from './model';
 import { rpc } from './rpc';
 import { webV1Feed } from '../entrypoints/xhs.content/api/note';
 import { webV1UserOtherinfo,webV1UserPosted } from '../entrypoints/xhs.content/api/user';
-import { awemeDetail,awemePost } from '../entrypoints/dy.content/api/aweme';
+import { awemeDetail,awemePost,mixAweme } from '../entrypoints/dy.content/api/aweme';
 import { userProfileOther } from '../entrypoints/dy.content/api/user';
 export interface Context { platform:Platform; id:string; href:string; kind:'post'|'author' }
 export function context(platform:Platform):Context|undefined {
@@ -60,6 +60,31 @@ export async function* authorPosts(c:Context,mode:string,limit:number,signal:Abo
   const next=c.platform==='xhs'?r.cursor:r.max_cursor;if(!r.has_more)return;assertNextCursor(cursor,next,true,cursors);if(!entries.length)throw new Error('返回空页但仍标记有后续数据，已停止');cursor=next;cursors.add(String(next));
   await new Promise(r=>setTimeout(r,1000));
  }while(true);
+}
+
+/**
+ * Read a Douyin collection in publication order. The endpoint exposes a
+ * numeric cursor and may claim that another page exists without advancing
+ * it; keep the same loop guard used by creator-homepage collection so a
+ * malformed response cannot spin forever.
+ */
+export async function* mixPosts(mixId:string,signal:AbortSignal):AsyncGenerator<any>{
+ let cursor=0;const cursors=new Set([String(cursor)]);const seen=new Set<string>();
+ while(true){
+  if(signal.aborted)return;
+  const result:any=await mixAweme({mix_id:mixId,cursor,count:10});
+  const entries=result?.aweme_list;
+  if(!Array.isArray(entries))throw new Error('合集接口没有返回作品列表，请确认登录状态');
+  for(const raw of entries){
+   if(signal.aborted)return;
+   const id=String(raw?.aweme_id||'');if(!id||seen.has(id))continue;
+   seen.add(id);yield raw;
+  }
+  if(!result?.has_more)return;
+  const next=result.cursor;assertNextCursor(cursor,next,true,cursors);
+  cursor=next;cursors.add(String(next));
+  await new Promise(r=>setTimeout(r,800));
+ }
 }
 
 function mediaShape(value:any,depth=0):any{if(depth>7)return typeof value;if(Array.isArray(value))return {length:value.length,sample:value.slice(0,1).map(v=>mediaShape(v,depth+1))};if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).map(([k,v])=>[k,mediaShape(v,depth+1)]));if(typeof value==='string')return /^https?:/.test(value)?'media URL':`string(${value.length})`;return value;}

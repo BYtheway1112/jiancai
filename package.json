@@ -1,6 +1,7 @@
 {
   "name": "social-media-copilot",
-  "version": "0.2.10",
+  "private": true,
+  "version": "0.2.11",
   "type": "module",
   "author": "BY",
   "engines": {

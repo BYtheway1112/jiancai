@@ -38,12 +38,30 @@ export function eaglePayload(post:Post,index:number,folderId?:string){
  const title=displayTitle(post),type=displayType(post),author=displayAuthor(post),body=displayBody(post),source=displaySource(post);
  const total=eagleAssets(post).length;
  const fields=Object.entries(post.fields).map(([k,v])=>`${k}：${formatFieldValue(v)}`).join('\n');
- // Keep the annotation readable in Eagle while retaining every collected field
- // for later search/export. The sections mirror the metadata used by manual
- // Feishu-to-Eagle imports and clearly distinguish inferred display text from
- // the original full post copy.
+ // Keep the annotation compatible with the five-section format used by
+ // Feishu-to-Eagle imports. The first section is always the unmodified post
+ // copy; the short summary and production route are deliberately marked as
+ // metadata-only because the extension does not perform visual analysis.
  const annotation=[
   `简采来源：${key}`,
+  '【来源文案】',
+  body||'未取得来源文案',
+  '',
+  '【检索摘要】',
+  title,
+  '',
+  '【可借鉴】',
+  '待后续轻拆；先保留来源和可检索元数据。',
+  '',
+  '【制作路线】',
+  '待人工复核',
+  '',
+  '【核对说明】',
+  `简采直接采集；平台：${post.platform==='xhs'?'小红书':'抖音'}；作品类型：${type}；来源键：${key}；素材序号：${index+1}/${total}；未进行视觉内容推断`,
+  '',
+  '【来源链接】',
+  source||'未取得来源链接',
+  '',
   '简采元数据：3',
   `平台：${post.platform==='xhs'?'小红书':'抖音'}`,
   `作品类型：${type}`,

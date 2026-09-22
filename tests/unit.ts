@@ -79,6 +79,12 @@ test('Eagle payload mirrors Feishu metadata for all four platform and media type
   const assets=eagleAssets(post);assert(assets.length>0);
   const payload=eaglePayload(post,0);
   assert.match(payload.annotation,/简采元数据：3/);
+  assert.match(payload.annotation,/【来源文案】/);
+  assert.match(payload.annotation,/【检索摘要】/);
+  assert.match(payload.annotation,/【可借鉴】/);
+  assert.match(payload.annotation,/【制作路线】/);
+  assert.match(payload.annotation,/【核对说明】/);
+  assert.match(payload.annotation,/【来源链接】/);
   assert.match(payload.annotation,/平台：(小红书|抖音)/);
   assert.match(payload.annotation,/作品类型：/);
   assert.match(payload.annotation,/内容标题：/);
