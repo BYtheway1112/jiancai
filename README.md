@@ -36,7 +36,7 @@
 
 本项目基于 [social-media-copilot](https://github.com/iszhouhua/social-media-copilot) 的 GPL-3.0 开源代码进行改造，保留上游许可证和必要版权说明；界面、简采采集列表、飞书/Eagle 集成、图文单张下载及抖音合集同步为本项目的改动。请遵守目标平台的服务条款和适用法律。
 
-## 作者
+## Contributors / 作者
 
 - BY
 - ChatGPT
