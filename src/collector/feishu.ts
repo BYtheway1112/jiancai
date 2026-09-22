@@ -67,9 +67,6 @@ export function sameFieldValue(expected:any,actual:any,type:number):boolean{
  }
  return JSON.stringify(normalized)===JSON.stringify(expected);
 }
- // Images above this size are the ones that keep tripping mid-download network
- // errors. If any image in a group exceeds it, the whole group stays link-only.
- export const SOFT_LIMIT=15*1024*1024;
 function attachmentSource(m:Post['media'][number]){const isImage=/图片|封面/.test(m.field);return isImage?assertCleanImageSource(m.url,m.field.startsWith('笔记')?'xhs':'dy'):mediaUrl(m.url);}
 async function headSize(src:string):Promise<number|undefined>{try{const head=await fetch(src,{method:'HEAD',credentials:'omit',signal:AbortSignal.timeout(15000)});if(head.ok&&head.headers.has('content-length')&&!head.headers.get('content-encoding'))return Number(head.headers.get('content-length'));}catch{}return undefined;}
 export class Feishu {
@@ -140,16 +137,6 @@ export class Feishu {
    const renamed=media.map(original=>/图片|封面/.test(original.field)?{...original,name:original.name.replace(/\.[^.]+$/, '-原图.jpg')}:original);
    const pending=renamed.filter(m=>!previous.some((f:any)=>f.name===m.name||/图片|封面/.test(m.field)&&['jpg','jpeg','png'].some(ext=>f.name===m.name.replace(/\.[^.]+$/,'.'+ext))));
    if(!pending.length)continue;
-   // Whole-group link-only: if any pending image exceeds the soft limit,
-   // upload none of the group. The record keeps the one-shot download link
-   // field, so no half-uploaded image set is left behind.
-   if(pending.every(m=>/图片|封面/.test(m.field))){
-    let oversize=false;
-    for(const m of pending){
-     try{const s=m.size!==undefined?m.size:await headSize(attachmentSource(m));if(s!==undefined&&s>SOFT_LIMIT){oversize=true;break;}}catch{}
-    }
-    if(oversize){warnings.push(`${name}：含超过 15 MB 的图片，整组仅保存链接`);continue;}
-   }
    let added=false;
    for(const m of pending){
     try{files.push(await this.attachment(m,target.base));added=true;}

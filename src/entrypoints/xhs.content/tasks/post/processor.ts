@@ -1,5 +1,6 @@
 import { TaskProcessor } from "@/utils/task";
-import { unionBy } from "lodash";
+import lodash from "lodash";
+const { unionBy } = lodash;
 import { FormSchema } from ".";
 import { webV1Feed } from "../../api/note";
 import { getPostMedias } from "../../utils/media";

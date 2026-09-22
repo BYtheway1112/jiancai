@@ -75,12 +75,15 @@ export async function* mixPosts(mixId:string,signal:AbortSignal):AsyncGenerator<
   const result:any=await mixAweme({mix_id:mixId,cursor,count:10});
   const entries=result?.aweme_list;
   if(!Array.isArray(entries))throw new Error('合集接口没有返回作品列表，请确认登录状态');
+  if(!entries.length&&result?.has_more)throw new Error('合集接口返回空页但仍有后续数据，已停止；已采集结果保留');
+  let added=0;
   for(const raw of entries){
    if(signal.aborted)return;
    const id=String(raw?.aweme_id||'');if(!id||seen.has(id))continue;
-   seen.add(id);yield raw;
+   seen.add(id);added++;yield raw;
   }
   if(!result?.has_more)return;
+  if(!added)throw new Error('合集分页没有新增作品，已停止；已采集结果保留');
   const next=result.cursor;assertNextCursor(cursor,next,true,cursors);
   cursor=next;cursors.add(String(next));
   await new Promise(r=>setTimeout(r,800));

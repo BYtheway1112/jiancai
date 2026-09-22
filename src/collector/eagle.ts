@@ -92,8 +92,9 @@ export async function importEagle(post:Post,folderId:string,expectedLibrary:stri
   let item=await find();const reused=!!item;
   if(item){
    // Keep the existing binary file, but refresh metadata from the latest
-   // page snapshot so re-importing a post updates its title/copy/tags/source.
-   await eagleCall('/api/item/update',{id:item.id,name:payload.name,tags:payload.tags,annotation:payload.annotation,url:payload.website});
+   // page snapshot so re-importing a post updates its title/copy/tags/source
+   // and follows the folder selected for this import.
+   await eagleCall('/api/item/update',{id:item.id,name:payload.name,tags:payload.tags,annotation:payload.annotation,url:payload.website,folderId:folderId||''});
   }
   let importError:unknown;if(!item){try{
    if(/图片|封面/.test(media[i].field)){const prepared=await fetchPreparedImage(media[i].url,post.platform);payload.url=`data:${prepared.extension==='jpg'?'image/jpeg':'image/png'};base64,${encodeImageDownloadBytes(new Uint8Array(await prepared.blob.arrayBuffer()))}`;}

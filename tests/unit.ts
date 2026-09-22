@@ -3,7 +3,7 @@ import {test} from 'node:test';
 import fs from 'node:fs';
 import * as XLSX from 'xlsx';
 import {normalize,numberValue,sizeAllowed,LIMIT,mergePost,migratePost,assertNextCursor,Target,postType} from '../src/collector/model';
-import {Feishu,mappedFields,mediaUrl,mediaDownloadTimeout,SOFT_LIMIT,Field} from '../src/collector/feishu';
+import {Feishu,mappedFields,mediaUrl,mediaDownloadTimeout,Field} from '../src/collector/feishu';
 import {workbook} from '../src/collector/excel';
 const x=()=>normalize('xhs',{note_id:'abc',title:'=SUM(A1)',desc:'完整正文\n#话题',type:'video',user:{user_id:'u',nickname:'作者'},interact_info:{liked_count:'1.2万',collected_count:'0'},video:{capa:{duration:180},media:{stream:{h264:[{master_url:'https://sns-video-bd.xhscdn.com/test.mp4',size:100}]}}}},'https://www.xiaohongshu.com/explore/abc',undefined,1000);
 const target:Target={id:'t',name:'test',contentType:'video',platform:'xhs',base:'base',table:'table',mapping:{笔记ID:'ID',笔记内容:'正文',点赞量:'赞',笔记视频:'视频'}};
@@ -349,16 +349,9 @@ async function runImageSync(p:ReturnType<typeof imagePost>,uploads:{n:number}){
  }finally{globalThis.fetch=original;}
 }
 
-test('any image over 15 MB skips the whole image group and keeps links only',async()=>{
+test('images below the official 20 MB limit are attempted individually',async()=>{
  const uploads={n:0};
- const result=await runImageSync(imagePost([1024,SOFT_LIMIT+1,1024]),uploads);
- assert.equal(uploads.n,0);
- assert.ok(result.warnings.some(w=>w.includes('整组仅保存链接')),result.warnings.join(' | '));
-});
-
-test('images within the soft limit proceed to per-file upload instead of group skip',async()=>{
- const uploads={n:0};
- const result=await runImageSync(imagePost([1024,1024]),uploads);
+ const result=await runImageSync(imagePost([1024,16*1024*1024,1024]),uploads);
  assert.equal(uploads.n,0);
  assert.ok(!result.warnings.some(w=>w.includes('整组仅保存链接')),result.warnings.join(' | '));
  assert.ok(result.warnings.some(w=>w.includes('笔记图片-')),result.warnings.join(' | '));

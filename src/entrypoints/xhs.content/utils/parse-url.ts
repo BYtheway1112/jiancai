@@ -1,4 +1,5 @@
-import { split } from "lodash";
+import lodash from "lodash";
+const { split } = lodash;
 
 export type ParsePostUrlResult = {
     id: string;

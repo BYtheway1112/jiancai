@@ -8,8 +8,8 @@ export default defineConfig({
   manifest: {
     name: '简采 · 小红书与抖音作品采集',
     description: '小红书与抖音作品采集，导出 Excel、同步飞书多维表格和导入 Eagle。',
-    version: '0.2.12',
-    version_name: '0.2.12',
+    version: '0.2.13',
+    version_name: '0.2.13',
     default_locale: 'zh_CN',
     host_permissions: ["*://*.xiaohongshu.com/*", "*://*.douyin.com/*", "http://localhost/*", "https://open.feishu.cn/*", "https://*.xhscdn.com/*", "https://*.douyinvod.com/*", "https://*.douyinstatic.com/*", "https://*.douyinpic.com/*", "https://*.byteimg.com/*", "https://*.ibytedtos.com/*", "https://*.pstatp.com/*", "https://*.snssdk.com/*", "https://*.bytecdn.cn/*"],
     permissions: ["activeTab", "downloads", "scripting", "storage"],

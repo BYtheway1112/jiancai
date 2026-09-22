@@ -1,5 +1,6 @@
 import { TaskProcessor } from "@/utils/task";
-import { unionBy } from "lodash";
+import lodash from "lodash";
+const { unionBy } = lodash;
 import { FormSchema } from ".";
 import * as http from "../../api";
 import { limitNested, nestedCount, normalizeLimit } from "@/utils/comment-limit";
