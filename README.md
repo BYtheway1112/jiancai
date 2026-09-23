@@ -1,6 +1,6 @@
 # 简采 · 小红书与抖音作品采集
 
-![简采 Logo](./logo.svg)
+<img src="./logo.svg" width="96" height="96" alt="简采 Logo">
 
 简采是一个自用 Chrome 扩展，用紧凑的页面入口采集小红书与抖音的单条作品和博主主页作品。数据先保存在浏览器本地，可导出 Excel、同步到飞书多维表格，也可以把图文图片或原视频连同标题、完整文案、作者、标签和来源链接直接归档到 Eagle。
 
@@ -35,8 +35,3 @@
 ## 许可证与来源
 
 本项目基于 [social-media-copilot](https://github.com/iszhouhua/social-media-copilot) 的 GPL-3.0 开源代码进行改造，保留上游许可证和必要版权说明；界面、简采采集列表、飞书/Eagle 集成、图文单张下载及抖音合集同步为本项目的改动。请遵守目标平台的服务条款和适用法律。
-
-## Contributors / 作者
-
-- BY
-- ChatGPT
