@@ -37,6 +37,87 @@ export default defineBackground(() => {
         }).then(res => res?.[0]?.result);
     });
 
+    // Some search results are served with a page-scoped signed request that the
+    // extension API cannot reproduce. The player already has the complete item
+    // in its React props, so use that data as a local fallback for downloads.
+    onMessage('extractDyAweme', ({ data, sender }) => {
+        return browser.scripting.executeScript({
+            target: { tabId: sender.tab?.id! },
+            world: 'MAIN',
+            func: (awemeId) => {
+                const wanted = String(awemeId);
+                const active = document.querySelector(`[data-e2e-vid="${CSS.escape(wanted)}"]`);
+                if (!active) return null;
+                const fiberKey = Object.keys(active).find((key) => key.startsWith('__reactFiber$'));
+                let fiber = fiberKey ? (active as any)[fiberKey] : undefined;
+                for (let depth = 0; fiber && depth < 24; depth += 1, fiber = fiber.return) {
+                    const item = fiber.memoizedProps?.item;
+                    if (item && String(item.awemeId ?? item.aweme_id) === wanted) {
+                        // Return only the fields used by the downloader. This
+                        // keeps React internals and page state out of the
+                        // extension message and avoids cloning framework data.
+                        return {
+                            awemeId: item.awemeId,
+                            desc: item.desc,
+                            itemTitle: item.itemTitle,
+                            caption: item.caption,
+                            createTime: item.createTime,
+                            mediaType: item.mediaType,
+                            shareInfo: item.shareInfo && { shareUrl: item.shareInfo.shareUrl },
+                            video: item.video && {
+                                uri: item.video.uri,
+                                duration: item.video.duration,
+                                width: item.video.width,
+                                height: item.video.height,
+                                playAddr: item.video.playAddr,
+                                playAddrSize: item.video.playAddrSize,
+                                playApi: item.video.playApi,
+                                coverUri: item.video.coverUri,
+                                coverUrlList: item.video.coverUrlList,
+                                originCover: item.video.originCover,
+                            },
+                            images: Array.isArray(item.images) ? item.images.map((image: any) => ({
+                                urlList: image.urlList,
+                                downloadUrlList: image.downloadUrlList,
+                                height: image.height,
+                                width: image.width,
+                                uri: image.uri,
+                            })) : [],
+                            music: item.music && {
+                                playUrl: item.music.playUrl,
+                                title: item.music.title,
+                                id: item.music.id,
+                            },
+                            stats: item.stats && {
+                                admireCount: item.stats.admireCount,
+                                collectCount: item.stats.collectCount,
+                                commentCount: item.stats.commentCount,
+                                diggCount: item.stats.diggCount,
+                                playCount: item.stats.playCount,
+                                shareCount: item.stats.shareCount,
+                            },
+                            authorInfo: item.authorInfo && {
+                                uid: item.authorInfo.uid,
+                                uniqueId: item.authorInfo.uniqueId,
+                                secUid: item.authorInfo.secUid,
+                                shortId: item.authorInfo.shortId,
+                                nickname: item.authorInfo.nickname,
+                                signature: item.authorInfo.signature,
+                                followerCount: item.authorInfo.followerCount,
+                            },
+                            mixInfo: item.mixInfo && {
+                                mixId: item.mixInfo.mixId,
+                                mixName: item.mixInfo.mixName,
+                            },
+                        };
+                    }
+                }
+                return null;
+            },
+            args: [data.awemeId],
+        }).then((results) => results?.[0]?.result ?? null);
+    });
+
     onMessage('mnsv2', ({ data, sender }) => {
         return browser.scripting.executeScript({
             target: {

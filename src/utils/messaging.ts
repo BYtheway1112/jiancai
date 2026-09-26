@@ -4,6 +4,7 @@ import type { ImageDownloadRequest } from './image-download';
 export interface ProtocolMap {
     compact(data: {action: string; data?: any}): any;
     fetch(data: RequestInit & { url: string }): any;
+    extractDyAweme(data: { awemeId: string }): any;
     webmsxyw(data: { path: string, body: any }): { 'X-s': string; 'X-t': string; };
     mnsv2(args: any): string;
     openPopup(): void;
