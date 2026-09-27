@@ -15,6 +15,19 @@ test('current image prefers an active slide data index', () => {
     ], urls), 2);
 });
 
+test('a visible neighbouring slide does not override the active slide', () => {
+    assert.equal(chooseCurrentImageIndex([
+        {order: 0, visible: true, active: true, explicitIndex: 5},
+        {order: 1, visible: true, active: false, explicitIndex: 6},
+    ], [
+        ...urls,
+        'https://p3.douyinpic.com/img/d.jpg?sign=4',
+        'https://p3.douyinpic.com/img/e.jpg?sign=5',
+        'https://p3.douyinpic.com/img/f.jpg?sign=6',
+        'https://p3.douyinpic.com/img/g.jpg?sign=7',
+    ]), 5);
+});
+
 test('current image matches the active DOM URL despite signed query strings', () => {
     assert.equal(chooseCurrentImageIndex([
         {order: 0, visible: true, active: false, source: 'https://p3.douyinpic.com/img/a.jpg'},

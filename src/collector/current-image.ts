@@ -45,7 +45,12 @@ function isActive(element: Element): boolean {
     const className = typeof (element as HTMLElement).className === 'string'
         ? (element as HTMLElement).className
         : '';
-    return /(?:^|[-_ ])(?:active|current|selected|visible)(?:$|[-_ ])/i.test(className)
+    // Swiper marks neighbouring slides as `swiper-slide-visible` while only
+    // the selected slide receives `swiper-slide-active`.  Treating
+    // `visible` as an active marker makes the next slide win when the
+    // carousel keeps it in the viewport, which shifts the one-click download
+    // index by one.  Visibility is handled separately by `isVisible()`.
+    return /(?:^|[-_ ])(?:active|current|selected)(?:$|[-_ ])/i.test(className)
         || element.getAttribute('aria-current') === 'true'
         || element.getAttribute('aria-selected') === 'true'
         || element.getAttribute('aria-hidden') === 'false';
@@ -80,7 +85,12 @@ function observationsFromDom(platform: Platform): ImageObservation[] {
     const centerY = rootRect.top + rootRect.height / 2;
     const images = [...root.querySelectorAll<HTMLImageElement>('img')];
     return images.map((image, order) => {
-        const slide = image.closest('[data-index], [data-swiper-slide-index], [data-slide-index], [class*="slide"], [class*="Slide"]') || image;
+        // `img.note-slider-img` contains the word "slider" in its own class.
+        // A broad `[class*="slide"]` selector therefore matched the image
+        // itself and hid the parent Swiper index.  Restrict the fallback to
+        // actual Swiper slide elements so `data-index="5"` remains the sixth
+        // image instead of falling back to the next visible image.
+        const slide = image.closest('[data-index], [data-swiper-slide-index], [data-slide-index], .swiper-slide, [class*="swiper-slide"], [class*="SwiperSlide"]') || image;
         const rect = image.getBoundingClientRect();
         const source = image.currentSrc || image.src || image.getAttribute('data-src') || image.getAttribute('data-original') || undefined;
         const distance = Math.hypot((rect.left + rect.width / 2) - centerX, (rect.top + rect.height / 2) - centerY);
