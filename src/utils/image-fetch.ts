@@ -6,7 +6,7 @@ export async function fetchPreparedImage(value: string, platform: 'xhs' | 'dy') 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 45_000);
     try {
-        const response = await fetch(source, { credentials: 'omit', cache: 'no-store', signal: controller.signal });
+        const response = await fetch(source, { credentials: 'omit', cache: 'no-store', redirect: 'error', signal: controller.signal });
         if (!response.ok) throw new Error(`素材请求失败（HTTP ${response.status}），未保存`);
         const finalUrl = assertCleanImageSource(response.url || source, platform);
         const blob = await response.blob();

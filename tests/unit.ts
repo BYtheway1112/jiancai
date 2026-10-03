@@ -13,7 +13,7 @@ test('official 20 MB inclusive and unknown fails closed',()=>{assert.equal(LIMIT
 test('dedup updates fields and platform key isolates IDs',()=>{const p=x();const next={...p,fields:{笔记ID:'abc',点赞量:14000}};assert.equal(mergePost(p,next).fields['笔记内容'],p.fields['笔记内容']);assert.equal(mergePost(p,next).fields['点赞量'],14000);assert.notEqual(p.key,normalize('dy',{aweme_id:'abc'},'https://www.douyin.com/video/abc').key);});
 test('invalid or repeated pagination stops',()=>{assert.throws(()=>assertNextCursor('a','a',true));assert.throws(()=>assertNextCursor(0,undefined,true));assert.doesNotThrow(()=>assertNextCursor('a','b',true));});
 test('only mapped fields are written',()=>{const p=x();p.fields['手工备注']='do not overwrite';assert.deepEqual(mappedFields(p,target,fields),{ID:'abc',正文:'完整正文\n#话题',赞:12000});});
-test('media only supported public https CDN',()=>{assert.throws(()=>mediaUrl('http://127.0.0.1/x'));assert.throws(()=>mediaUrl('https://xhscdn.com.evil.test/x'));assert.throws(()=>mediaUrl('https://u:p@xhscdn.com/x'));});
+test('media only supported public https CDN',()=>{assert.throws(()=>mediaUrl('http://127.0.0.1/x'));assert.throws(()=>mediaUrl('https://xhscdn.com.evil.test/x'));assert.throws(()=>mediaUrl('https://u:p@xhscdn.com/x'));assert.throws(()=>mediaUrl('https://www.douyin.com/video/123'));assert.equal(mediaUrl('https://www.douyin.com/aweme/v1/play/?video_id=123'),'https://www.douyin.com/aweme/v1/play/?video_id=123');});
 test('real XLSX roundtrip, platforms separated, formula text not executable',()=>{const wb=workbook([x(),normalize('dy',{aweme_id:'7675594554086657332',desc:'抖音完整内容'},'https://www.douyin.com/video/7675594554086657332')]);const data=XLSX.write(wb,{type:'buffer',bookType:'xlsx'});fs.mkdirSync('../test-results',{recursive:true});fs.writeFileSync('../test-results/roundtrip.xlsx',data);const back=XLSX.read(data,{type:'buffer'});assert.deepEqual(back.SheetNames,['小红书视频','抖音视频']);const rows=XLSX.utils.sheet_to_json<any>(back.Sheets['小红书视频']);assert.equal(rows[0]['笔记内容'],'完整正文\n#话题');assert.equal(rows[0]['笔记标题'],'=SUM(A1)');const cells=Object.values(back.Sheets['小红书视频']);assert(!cells.some((c:any)=>c?.f));});
 
 test('Douyin image posts prefer ordered original image URLs and keep image-only fields',()=>{
@@ -62,9 +62,36 @@ test('legacy Douyin image records migrate old image attachments and stale video 
 });
 test('oversized and unknown media never uploaded',async()=>{const original=globalThis.fetch;let uploads=0;globalThis.fetch=async(url:any)=>{if(String(url).includes('upload_all'))uploads++;return new Response('',{status:200});};try{const f=new Feishu({appId:'a',secret:'b'});await assert.rejects(f.attachment({field:'视频',url:'https://sns-video-bd.xhscdn.com/x',name:'x.mp4',size:LIMIT+1},'base'),/20 MB/);await assert.rejects(f.attachment({field:'视频',url:'https://sns-video-bd.xhscdn.com/x',name:'x.mp4'},'base'),/无法确认/);assert.equal(uploads,0);}finally{globalThis.fetch=original;}});
 test('actual overlimit response stops before upload',async()=>{const original=globalThis.fetch;let uploads=0;globalThis.fetch=async(url:any,init:any)=>{if(String(url).includes('upload'))uploads++;if(init?.method==='HEAD')return new Response(null,{headers:{'content-length':'10'}});return new Response(new Uint8Array(LIMIT+1),{headers:{'content-type':'video/mp4'}});};try{await assert.rejects(new Feishu({appId:'a',secret:'b'}).attachment({field:'视频',url:'https://sns-video-bd.xhscdn.com/x',name:'x.mp4'},'base'),/实际文件超过/);assert.equal(uploads,0);}finally{globalThis.fetch=original;}});
+test('Feishu rejects a malicious final URL on HEAD before downloading or uploading',async()=>{
+ const original=globalThis.fetch;let gets=0;let uploads=0;let redirects:string[]=[];
+ globalThis.fetch=async(url:any,init:any)=>{redirects.push(init?.redirect);if(init?.method==='HEAD')return responseWithUrl(new Response(null,{headers:{'content-length':'10'}}),'https://evil.example/x.mp4');gets++;if(String(url).includes('upload_all'))uploads++;return new Response(new Uint8Array([1]),{headers:{'content-type':'video/mp4'}});};
+ try{await assert.rejects(new Feishu({appId:'a',secret:'b'}).attachment({field:'视频',url:'https://sns-video-bd.xhscdn.com/x.mp4',name:'x.mp4'},'base'),/素材地址不在支持/);assert.deepEqual(redirects,['error']);assert.equal(gets,0);assert.equal(uploads,0);}finally{globalThis.fetch=original;}
+});
+test('Feishu rejects a malicious final URL on GET and accepts an allowlisted CDN redirect',async()=>{
+ const original=globalThis.fetch;let phase:'evil'|'allowed'='evil';let uploads=0;let redirects:string[]=[];
+ globalThis.fetch=async(url:any,init:any)=>{
+  redirects.push(init?.redirect);
+  if(init?.method==='HEAD')return responseWithUrl(new Response(null,{headers:{'content-length':'3'}}),'https://sns-video-bd.xhscdn.com/final.mp4');
+  if(String(url).includes('upload_all')){uploads++;return new Response(JSON.stringify({code:0,data:{file_token:'ok'}}),{headers:{'content-type':'application/json'}});}
+  return responseWithUrl(new Response(new Uint8Array([1,2,3]),{headers:{'content-type':'video/mp4'}}),phase==='evil'?'https://evil.example/final.mp4':'https://sns-video-bd.xhscdn.com/final.mp4');
+ };
+ const f=new Feishu({appId:'a',secret:'b'});(f as any).token='test-token';
+ try{await assert.rejects(f.attachment({field:'视频',url:'https://sns-video-bd.xhscdn.com/x.mp4',name:'x.mp4'},'base'),/素材地址不在支持/);assert.equal(uploads,0);phase='allowed';const result=await f.attachment({field:'视频',url:'https://sns-video-bd.xhscdn.com/x.mp4',name:'x.mp4'},'base');assert.deepEqual(result,{file_token:'ok'});assert.equal(uploads,1);assert(redirects.length>=4&&redirects.every(value=>value==='error'));}finally{globalThis.fetch=original;}
+});
 test('retry after metadata success uses existing ID; partial attachment reported',async()=>{class Fake extends Feishu{record:any;writes:string[]=[];async fields(){return fields;}async attachment():Promise<any>{throw new Error('超过 20 MB，仅保存链接');}async call(path:string,method='GET',body?:any):Promise<any>{if(path.includes('/search'))return {items:this.record?[this.record]:[]};if(method==='POST'||method==='PUT'){this.writes.push(method);this.record={record_id:'r',fields:{...this.record?.fields,...body.fields,手写:'保留'}};return {record:this.record};}return {record:this.record};}}const f=new Fake({appId:'a',secret:'b'});const first=await f.sync(x(),target);assert.equal(first.updated,false);assert.equal(first.warnings.length,1);const second=await f.sync(x(),target);assert.equal(second.updated,true);assert.deepEqual(f.writes,['POST','PUT']);assert.equal(f.record.fields.手写,'保留');});
 test('duplicate remote IDs refuse writes',async()=>{class Fake extends Feishu{async fields(){return fields;}async call(){return {items:[{record_id:'1'},{record_id:'2'}]};}}await assert.rejects(new Fake({appId:'a',secret:'b'}).sync(x(),target),/多个相同/);});
-import {eagleAssets,eaglePayload,eagleTags} from '../src/collector/eagle';
+import {eagleAssets,eaglePayload,eagleTags,eagleCall,EAGLE_ORIGIN} from '../src/collector/eagle';
+function responseWithUrl(response:Response,url:string){Object.defineProperty(response,'url',{value:url});return response;}
+test('Eagle API stays on the fixed loopback origin and forbids redirects',async()=>{
+ const original=globalThis.fetch;let seenUrl='';let seenRedirect='';
+ globalThis.fetch=async(url:any,init:any)=>{seenUrl=String(url);seenRedirect=init.redirect;return responseWithUrl(new Response(JSON.stringify({status:'success',data:{ok:true}}),{headers:{'content-type':'application/json'}}),`${EAGLE_ORIGIN}/api/library/info`);};
+ try{assert.deepEqual(await eagleCall('/api/library/info'),{ok:true});assert.equal(seenUrl,`${EAGLE_ORIGIN}/api/library/info`);assert.equal(seenRedirect,'error');await assert.rejects(eagleCall('https://evil.example/api'),/不受信任/);}finally{globalThis.fetch=original;}
+});
+test('Eagle rejects a response that resolves away from loopback',async()=>{
+ const original=globalThis.fetch;
+ globalThis.fetch=async()=>responseWithUrl(new Response(JSON.stringify({status:'success',data:{}}),{headers:{'content-type':'application/json'}}),'http://evil.example/api/library/info');
+ try{await assert.rejects(eagleCall('/api/library/info'),/不受信任/);}finally{globalThis.fetch=original;}
+});
 test('Eagle saves originals over 20 MB, preserves source and order',()=>{const p=x();p.media[0].size=LIMIT+1;p.media.push({field:'笔记封面',url:'https://sns-img-bd.xhscdn.com/a.jpg',name:'cover.jpg'});assert.equal(eagleAssets(p).length,1);const payload=eaglePayload(p,0,'folder');assert.equal(payload.folderId,'folder');assert.equal(payload.website,p.fields['笔记链接']);assert(payload.annotation.includes('完整正文\n#话题'));assert(payload.name.startsWith('[xhs-abc-1]'));});
 test('Eagle metadata is typed, searchable and keeps the full post copy',()=>{const p=x();p.fields['笔记话题']=['测试话题'];const payload=eaglePayload(p,0);assert.equal(payload.annotation.includes('作品类型：小红书视频'),true);assert.equal(payload.annotation.includes('素材字段：笔记视频'),true);assert.equal(payload.annotation.includes('来源文案：完整正文\n#话题'),true);assert.deepEqual(payload.tags,['简采','小红书','视频','测试话题']);assert.deepEqual(eagleTags(p),payload.tags);});
 test('Eagle payload mirrors Feishu metadata for all four platform and media types',()=>{

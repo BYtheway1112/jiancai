@@ -4,20 +4,28 @@ import { LIMIT, Post, Target, sizeAllowed, attachmentNames,fieldDefinition,schem
 export interface Credentials { appId:string; secret:string }
 export interface Field { field_id:string;field_name:string;type:number;property?:any }
 const origin='https://open.feishu.cn/open-apis';
-const allowedSuffixes=['xhscdn.com','douyin.com','douyinvod.com','douyinpic.com','byteimg.com','ibytedtos.com','pstatp.com','snssdk.com','bytecdn.cn','douyinstatic.com'];
-export function mediaUrl(value:string){const u=new URL(value);if(u.protocol!=='https:'||u.username||u.password||(u.hostname!=='ci.xiaohongshu.com'&&!allowedSuffixes.some(s=>u.hostname===s||u.hostname.endsWith('.'+s))))throw new Error('素材地址不在支持的 CDN 范围内');return u.href;}
+const apiOrigin=new URL(origin).origin;
+const allowedSuffixes=['xhscdn.com','douyinvod.com','douyinpic.com','byteimg.com','ibytedtos.com','pstatp.com','snssdk.com','bytecdn.cn','douyinstatic.com'];
+export function mediaUrl(value:string){
+ const u=new URL(value);const host=u.hostname;
+ const isDouyinPlayback=(host==='douyin.com'||host==='www.douyin.com')&&/^\/aweme\/v1\/play(?:\/|$)/.test(u.pathname);
+ const isAllowedHost=host==='ci.xiaohongshu.com'||isDouyinPlayback||allowedSuffixes.some(s=>host===s||host.endsWith('.'+s));
+ if(u.protocol!=='https:'||u.username||u.password||!isAllowedHost)throw new Error('素材地址不在支持的 CDN 范围内');
+ return u.href;
+}
 class MediaNetworkError extends Error {}
 const MB=1048576;
 // Large originals need more than a fixed 45s: scale with known size, clamped to 45–120s.
 export function mediaDownloadTimeout(size?:number){return Math.max(45000,Math.min(120000,Math.round((size&&size>0?size:0)/MB*15000)));}
-async function downloadMedia(src:string,size?:number):Promise<Blob>{
+async function downloadMedia(src:string,size:number|undefined,validate:(value:string)=>string):Promise<Blob>{
  let lastNetwork:MediaNetworkError|undefined;
  for(let attempt=0;attempt<3;attempt++){
   const abort=new AbortController();const timer=setTimeout(()=>abort.abort(),mediaDownloadTimeout(size));
   try{
    let response:Response;
-   try{response=await fetch(src,{credentials:'omit',cache:'no-store',signal:abort.signal});}catch(e){throw new MediaNetworkError('素材连接失败：'+(e as Error).message);}
+   try{response=await fetch(src,{credentials:'omit',cache:'no-store',redirect:'error',signal:abort.signal});}catch(e){throw new MediaNetworkError('素材连接失败：'+(e as Error).message);}
    if(!response.ok||!response.body)throw new Error(`素材下载失败（HTTP ${response.status}），未上传`);
+   responseSource(response,src,validate);
    const reader=response.body.getReader();const chunks:Uint8Array[]=[];let actual=0;
    while(true){
     let part:ReadableStreamReadResult<Uint8Array>;
@@ -67,13 +75,27 @@ export function sameFieldValue(expected:any,actual:any,type:number):boolean{
  }
  return JSON.stringify(normalized)===JSON.stringify(expected);
 }
-function attachmentSource(m:Post['media'][number]){const isImage=/图片|封面/.test(m.field);return isImage?assertCleanImageSource(m.url,m.field.startsWith('笔记')?'xhs':'dy'):mediaUrl(m.url);}
-async function headSize(src:string):Promise<number|undefined>{try{const head=await fetch(src,{method:'HEAD',credentials:'omit',signal:AbortSignal.timeout(15000)});if(head.ok&&head.headers.has('content-length')&&!head.headers.get('content-encoding'))return Number(head.headers.get('content-length'));}catch{}return undefined;}
+function mediaSourceValidator(m:Post['media'][number]){const isImage=/图片|封面/.test(m.field);return (value:string)=>isImage?assertCleanImageSource(value,m.field.startsWith('笔记')?'xhs':'dy'):mediaUrl(value);}
+function attachmentSource(m:Post['media'][number]){return mediaSourceValidator(m)(m.url);}
+function responseSource(response:Response,src:string,validate:(value:string)=>string){
+ // Real fetch responses always expose the final URL. Tests and host shims may
+ // omit it, in which case the already validated source is the only safe value.
+ return validate(response.url||src);
+}
+async function headSize(src:string,validate:(value:string)=>string):Promise<number|undefined>{
+ let head:Response;
+ try{head=await fetch(src,{method:'HEAD',credentials:'omit',redirect:'error',signal:AbortSignal.timeout(15000)});}catch{return undefined;}
+ if(!head.ok)return undefined;
+ responseSource(head,src,validate);
+ if(head.headers.has('content-length')&&!head.headers.get('content-encoding'))return Number(head.headers.get('content-length'));
+ return undefined;
+}
 export class Feishu {
  private token='';
  constructor(private credentials:Credentials){}
- async authenticate(){const r=await fetch(`${origin}/auth/v3/tenant_access_token/internal`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({app_id:this.credentials.appId,app_secret:this.credentials.secret}),signal:AbortSignal.timeout(20000)});const j=await r.json();if(!r.ok||j.code!==0||!j.tenant_access_token)throw new Error(`飞书认证失败（${j.code??r.status}），请检查应用凭证`);this.token=j.tenant_access_token;}
- async call(path:string,method='GET',body?:any){if(!this.token)await this.authenticate();const r=await fetch(origin+path,{method,headers:{Authorization:`Bearer ${this.token}`,...(body instanceof FormData?{}:{'Content-Type':'application/json'})},body:body===undefined?undefined:body instanceof FormData?body:JSON.stringify(body),signal:AbortSignal.timeout(60000)});const j=await r.json();if(!r.ok||j.code!==0)throw new Error(`飞书操作失败（${j.code??r.status}）：${j.msg||'请检查权限或网络'}`);return j.data;}
+ private assertApiResponse(response:Response){if(response.url&&new URL(response.url).origin!==apiOrigin)throw new Error('飞书响应地址不受信任');}
+ async authenticate(){const r=await fetch(`${origin}/auth/v3/tenant_access_token/internal`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({app_id:this.credentials.appId,app_secret:this.credentials.secret}),redirect:'error',signal:AbortSignal.timeout(20000)});this.assertApiResponse(r);const j=await r.json();if(!r.ok||j.code!==0||!j.tenant_access_token)throw new Error(`飞书认证失败（${j.code??r.status}），请检查应用凭证`);this.token=j.tenant_access_token;}
+ async call(path:string,method='GET',body?:any){if(!this.token)await this.authenticate();const r=await fetch(origin+path,{method,headers:{Authorization:`Bearer ${this.token}`,...(body instanceof FormData?{}:{'Content-Type':'application/json'})},body:body===undefined?undefined:body instanceof FormData?body:JSON.stringify(body),redirect:'error',signal:AbortSignal.timeout(60000)});this.assertApiResponse(r);const j=await r.json();if(!r.ok||j.code!==0)throw new Error(`飞书操作失败（${j.code??r.status}）：${j.msg||'请检查权限或网络'}`);return j.data;}
  async list(path:string){const items:any[]=[];let page='';const seen=new Set<string>();do{const r=await this.call(path+(path.includes('?')?'&':'?')+'page_size=100'+(page?'&page_token='+encodeURIComponent(page):''));items.push(...r.items||[]);if(!r.has_more)break;if(!r.page_token||seen.has(r.page_token))throw new Error('飞书列表分页异常');page=r.page_token;seen.add(page);}while(true);return items;}
  tables(base:string){return this.list(`/bitable/v1/apps/${encodeURIComponent(base)}/tables`);}
  fields(t:Target):Promise<Field[]>{return this.list(`/bitable/v1/apps/${encodeURIComponent(t.base)}/tables/${encodeURIComponent(t.table)}/fields`);}
@@ -102,11 +124,12 @@ export class Feishu {
  }
  async attachment(m:Post['media'][number],base:string){
   const isImage=/图片|封面/.test(m.field);
-  const src=attachmentSource(m);
+  const validate=mediaSourceValidator(m);
+  const src=validate(m.url);
   if(m.size!==undefined&&!sizeAllowed(m.size))throw new Error(m.size>LIMIT?'超过 20 MB，仅保存链接':'大小无效，未上传');
-  const size=(await headSize(src)) ?? m.size;
+  const size=(await headSize(src,validate)) ?? m.size;
   if(!sizeAllowed(size))throw new Error(size&&size>LIMIT?'超过 20 MB，仅保存链接':'无法确认文件大小，未上传');
-  let file=await downloadMedia(src,size),name=m.name;
+  let file=await downloadMedia(src,size,validate),name=m.name;
   if(isImage){const prepared=await prepareImage(file);file=prepared.blob;name=name.replace(/\.[^.]+$/,'.'+prepared.extension);}
   if(!sizeAllowed(file.size))throw new Error('转换后的图片超过 20 MB，仅保存链接');
   const body=new FormData();body.append('file_name',name);body.append('parent_type','bitable_file');body.append('parent_node',base);body.append('size',String(file.size));body.append('file',file,name);

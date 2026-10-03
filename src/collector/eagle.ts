@@ -2,8 +2,26 @@ import {fetchPreparedImage} from '../utils/image-fetch';
 import {encodeImageDownloadBytes} from '../utils/image-download';
 import {Post,postType,Value} from './model';
 import {mediaUrl} from './feishu';
-const endpoint='http://localhost:41595';
-export async function eagleCall(path:string,body?:any){let r:Response;try{r=await fetch(endpoint+path,{method:body?'POST':'GET',headers:body?{'Content-Type':'application/json'}:undefined,body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(body?120000:15000)});}catch{throw new Error('无法连接 Eagle，或导入仍在处理中；请打开 Eagle 后检查，不要立即重复导入');}if(!r.ok)throw new Error(`Eagle 接口失败（${r.status}）`);const j=await r.json();if(j.status!=='success')throw new Error('Eagle 返回失败，请检查当前资源库');return j.data;}
+// Eagle exposes a local HTTP API without an extension-facing authentication
+// handshake. Keep the connection on the exact loopback origin, and reject
+// redirects so an API request cannot be sent to another local or remote host.
+export const EAGLE_ORIGIN='http://127.0.0.1:41595';
+function eagleRequestUrl(path:string){
+ const url=new URL(path,EAGLE_ORIGIN);
+ if(url.origin!==EAGLE_ORIGIN)throw new Error('Eagle 请求地址不受信任');
+ return url;
+}
+function assertEagleResponse(response:Response,requestUrl:URL){
+ const finalUrl=response.url;
+ if(finalUrl&&new URL(finalUrl).origin!==requestUrl.origin)throw new Error('Eagle 响应地址不受信任');
+}
+export async function eagleCall(path:string,body?:any){
+ const requestUrl=eagleRequestUrl(path);let r:Response;
+ try{r=await fetch(requestUrl.href,{method:body?'POST':'GET',headers:body?{'Content-Type':'application/json'}:undefined,body:body?JSON.stringify(body):undefined,redirect:'error',signal:AbortSignal.timeout(body?120000:15000)});}
+ catch{throw new Error('无法连接 Eagle，或导入仍在处理中；请打开 Eagle 后检查，不要立即重复导入');}
+ try{assertEagleResponse(r,requestUrl);}catch{throw new Error('Eagle 响应地址不受信任');}
+ if(!r.ok)throw new Error(`Eagle 接口失败（${r.status}）`);const j=await r.json();if(j.status!=='success')throw new Error('Eagle 返回失败，请检查当前资源库');return j.data;
+}
 export async function eagleInfo(){const lib=await eagleCall('/api/library/info');const roots=await eagleCall('/api/folder/list');const folders:{id:string;name:string}[]=[];const walk=(list:any[],parent='')=>{for(const f of list){const name=parent+f.name;folders.push({id:f.id,name});walk(f.children||[],name+' / ');}};walk(roots||[]);return {libraryId:lib.library?.path||lib.path,library:lib.library?.name||lib.name||lib.library?.path||lib.path||'当前 Eagle 资源库',folders};}
 export function eagleAssets(post:Post){return post.media.filter(m=>!m.field.includes('封面')&&!m.field.includes('音频'));}
 function displayType(post:Post):string{return `${post.platform==='xhs'?'小红书':'抖音'}${postType(post)==='image'?'图文':'视频'}`;}
