@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import fs from 'node:fs';
 import * as XLSX from 'xlsx';
-import {normalize,numberValue,sizeAllowed,LIMIT,mergePost,migratePost,assertNextCursor,Target,postType} from '../src/collector/model';
+import {normalize,numberValue,sizeAllowed,LIMIT,mergePost,migratePost,assertNextCursor,Target,postType,resolveDouyinVideoUrl} from '../src/collector/model';
 import {Feishu,mappedFields,mediaUrl,mediaDownloadTimeout,Field} from '../src/collector/feishu';
 import {workbook} from '../src/collector/excel';
 const x=()=>normalize('xhs',{note_id:'abc',title:'=SUM(A1)',desc:'完整正文\n#话题',type:'video',user:{user_id:'u',nickname:'作者'},interact_info:{liked_count:'1.2万',collected_count:'0'},video:{capa:{duration:180},media:{stream:{h264:[{master_url:'https://sns-video-bd.xhscdn.com/test.mp4',size:100}]}}}},'https://www.xiaohongshu.com/explore/abc',undefined,1000);
@@ -41,6 +41,15 @@ test('Douyin type detection uses media_type and does not infer image from URLs',
  assert.equal(p.fields['视频类型'],'视频');
  assert.equal(p.fields['视频文件链接'],'https://p3.douyinvod.com/video.mp4');
  assert.equal(p.fields['视频图片链接'],undefined);
+});
+test('Douyin video URLs skip HTML-producing playApi and prefer signed media sources',()=>{
+ const video={
+  download_addr:{url_list:['https://www.douyin.com/aweme/v1/play/?video_id=bad']},
+  play_addr:{url_list:['https://www.douyin.com/aweme/v1/play/?video_id=also-bad','https://p3.douyinvod.com/signed.mp4']},
+ };
+ assert.equal(resolveDouyinVideoUrl(video),'https://p3.douyinvod.com/signed.mp4');
+ const post=normalize('dy',{aweme_id:'fallback',media_type:4,video},'https://www.douyin.com/video/fallback');
+ assert.equal(post.fields['视频文件链接'],'https://p3.douyinvod.com/signed.mp4');
 });
 
 test('merging a changed Douyin type removes stale media fields in both directions',()=>{

@@ -1,4 +1,5 @@
 import type { MediaOption } from "@/components/common/download-media";
+import { resolveDouyinVideoUrl } from "@/collector/model";
 
 export const postMediaOptions: MediaOption[] = [{
     value: "video",
@@ -28,7 +29,7 @@ export function getPostMedias(aweme: DouyinAPI.AwemeDetail, mediaTypes: string[]
             // Search-modal fallback data already contains a signed play URL.
             // Prefer it; the old video_id endpoint remains the fallback for
             // regular detail responses.
-            let url = addr.url_list?.[0] || `https://www.douyin.com/aweme/v1/play/?video_id=${addr.uri}`;
+            let url = resolveDouyinVideoUrl(aweme.video) || `https://www.douyin.com/aweme/v1/play/?video_id=${addr.uri}`;
             fileInfos.push({
                 filename: `${name}.${aweme.video?.format || 'mp4'}`,
                 url: url,

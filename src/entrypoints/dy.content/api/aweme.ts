@@ -25,8 +25,12 @@ function normalizePageAweme(item: any): DouyinAPI.AwemeV1WebDetail {
             origin_cover: { uri: video.originCover || video.coverUri || '', height: video.height || 0, width: video.width || 0 },
             cover: { uri: video.coverUri || '', url_key: '', height: video.height || 0, width: video.width || 0, data_size: 0, url_list: coverUrls },
             cover_original_scale: { uri: video.coverUri || '', url_key: '', height: video.height || 0, width: video.width || 0, data_size: 0, url_list: coverUrls },
+            // React fallback data exposes both the signed CDN sources and a
+            // page-scoped playApi.  The latter often returns an HTML challenge
+            // when handed to chrome.downloads, so keep real media sources
+            // first and only retain playApi as a final fallback.
             download_addr: { uri: video.uri || '', url_key: '', height: video.height || 0, width: video.width || 0, data_size: Number(video.playAddrSize || 0), url_list: playAddr.map((x: any) => x.src).filter(Boolean) },
-            play_addr: { uri: video.uri || '', url_key: '', height: video.height || 0, width: video.width || 0, data_size: Number(video.playAddrSize || 0), url_list: [video.playApi, ...playAddr.map((x: any) => x.src)].filter(Boolean) },
+            play_addr: { uri: video.uri || '', url_key: '', height: video.height || 0, width: video.width || 0, data_size: Number(video.playAddrSize || 0), url_list: [...playAddr.map((x: any) => x.src), video.playApi].filter(Boolean) },
         },
         images,
         music: item.music || {},

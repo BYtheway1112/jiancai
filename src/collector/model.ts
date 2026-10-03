@@ -23,6 +23,30 @@ export function numberValue(v: unknown): number | undefined {
 }
 function url(v:any): string | undefined { return typeof v === 'string' ? v.replace(/^http:/,'https:') : undefined; }
 function first(v:any): string | undefined { return url(v?.url_list?.[0] || v?.url_default || v?.url_pre || v?.info_list?.find((x:any)=>x.image_scene==='WB_DFT')?.url || v?.info_list?.[0]?.url || v?.url); }
+function isDouyinPlaybackEndpoint(value:string): boolean {
+  try {
+    const parsed = new URL(value);
+    return /^(?:www\.)?douyin\.com$/i.test(parsed.hostname) && /^\/aweme\/v1\/play\/?/i.test(parsed.pathname);
+  } catch { return false; }
+}
+function candidateUrls(value:any): string[] {
+  if (!value || typeof value !== 'object') return [];
+  const list = [
+    ...(Array.isArray(value.url_list) ? value.url_list : []),
+    value.url_default,
+    value.url_pre,
+    value.url,
+  ];
+  return list.map(url).filter((item): item is string => Boolean(item));
+}
+/** Prefer a signed CDN media URL over Douyin's HTML-producing play endpoint. */
+export function resolveDouyinVideoUrl(video:any): string | undefined {
+  const candidates = [
+    ...candidateUrls(video?.download_addr),
+    ...candidateUrls(video?.play_addr),
+  ];
+  return candidates.find(value => !isDouyinPlaybackEndpoint(value)) || candidates[0];
+}
 function duration(ms:any): string | undefined { const n=numberValue(ms); if(n===undefined)return; const s=Math.floor(n/1000); return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`; }
 export function normalize(platform:Platform, raw:any, source:string, author?:any, now=Date.now()):Post {
  // XHS page snapshots use camelCase; its HTTP API uses snake_case.
@@ -63,7 +87,7 @@ export function normalize(platform:Platform, raw:any, source:string, author?:any
    num('图片数量',images.length);put('视频图片链接',images.join('\n'));images.forEach((x:string,i:number)=>add('视频图片',x,'jpg',i));
    if(!images.length)warnings.push('已识别为抖音图文，但未取得图片原图链接，请待作品加载完成后重试');
   }
-  else {const src=first(video.play_addr);put('视频文件链接',src);add('视频文件',src,'mp4',0,numberValue(video.play_addr?.data_size));const audio=first(raw.music?.play_url);put('音频文件链接',audio);add('音频文件',audio,'mp3');}
+  else {const src=resolveDouyinVideoUrl(video);put('视频文件链接',src);add('视频文件',src,'mp4',0,numberValue(video.download_addr?.data_size||video.play_addr?.data_size));const audio=first(raw.music?.play_url);put('音频文件链接',audio);add('音频文件',audio,'mp3');}
  }
  return {key:`${platform}:${id}`,platform,id,fields,media,warnings};
 }
