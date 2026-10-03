@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import {
     decodeImageDownloadBytes,
     encodeImageDownloadBytes,
+    imageDownloadCreatesWorkFolder,
     imageDownloadFolderName,
     imageDownloadOutputFilename,
     validateDyImageUrl,
@@ -25,6 +26,11 @@ function blob(bytes: Uint8Array): Blob {
 test('image download folder names combine a safe title and post ID', () => {
     assert.equal(imageDownloadFolderName('abc/123', '中秋:鱼灯/攻略?'), '中秋鱼灯攻略-abc123');
     assert.equal(imageDownloadFolderName('abc', undefined), '无标题-abc');
+});
+
+test('single-image saves use the selected parent while all-images saves use a post folder', () => {
+    assert.equal(imageDownloadCreatesWorkFolder('current'), false);
+    assert.equal(imageDownloadCreatesWorkFolder('all'), true);
 });
 
 test('image download accepts only HTTPS XHS CDN URLs', () => {

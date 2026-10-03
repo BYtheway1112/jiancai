@@ -15,6 +15,16 @@ export interface ImageDownloadTask extends ImageDownloadRequest {
     createdAt: number;
 }
 
+/**
+ * A single selected image is written directly to the chosen parent folder.
+ * An all-images task gets its own post folder so it cannot mix with another
+ * post's files. Keeping this decision pure makes the directory contract easy
+ * to test without invoking the File System Access API.
+ */
+export function imageDownloadCreatesWorkFolder(choice: 'all' | 'current'): boolean {
+    return choice === 'all';
+}
+
 export const IMAGE_DOWNLOAD_TASK_PREFIX = 'image-download:';
 
 export function imageDownloadTaskKey(taskId: string): string {
